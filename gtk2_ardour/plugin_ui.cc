@@ -45,7 +45,10 @@
 
 #include "widgets/tooltips.h"
 #include "widgets/fastmeter.h"
-
+#include "ardour/luaproc.h"
+#include "ardour/luascripting.h"
+#include "LuaBridge/LuaBridge.h"
+#include "luainstance.h"
 #include "ardour/session.h"
 #include "ardour/plugin.h"
 #include "ardour/plugin_insert.h"
@@ -78,6 +81,7 @@
 #include "latency_gui.h"
 #include "plugin_dspload_ui.h"
 #include "plugin_eq_gui.h"
+#include "plugin_test_gui.h"
 #include "plugin_presets_ui.h"
 #include "timers.h"
 #include "new_plugin_preset_dialog.h"
@@ -97,6 +101,7 @@ PluginUIWindow::PluginUIWindow (
 	boost::shared_ptr<PluginInsert> insert,
 	bool                            scrollable,
 	bool                            editor)
+//	boost::shared_ptr<ARDOUR::Processor> processor)
 	: ArdourWindow (string())
 	, was_visible (false)
 	, _keyboard_focused (false)
@@ -472,10 +477,12 @@ PlugUIBase::PlugUIBase (boost::shared_ptr<PluginInsert> pi)
 	, pin_management_button (_("Pinout"))
 	, description_expander (_("Description"))
 	, plugin_analysis_expander (_("Plugin analysis"))
+	, test_expander (_("Test Expander"))
 	, cpuload_expander (_("CPU Profile"))
 	, latency_gui (0)
 	, latency_dialog (0)
 	, eqgui (0)
+	, testgui(0)
 	, stats_gui (0)
 	, preset_gui (0)
 	, preset_dialog (0)
@@ -550,6 +557,9 @@ PlugUIBase::PlugUIBase (boost::shared_ptr<PluginInsert> pi)
 
 	plugin_analysis_expander.property_expanded().signal_changed().connect( sigc::mem_fun(*this, &PlugUIBase::toggle_plugin_analysis));
 	plugin_analysis_expander.set_expanded(false);
+
+	test_expander.property_expanded().signal_changed().connect( sigc::mem_fun(*this, &PlugUIBase::toggle_plugin_test));
+	test_expander.set_expanded(false);
 
 	cpuload_expander.property_expanded().signal_changed().connect( sigc::mem_fun(*this, &PlugUIBase::toggle_cpuload_display));
 	cpuload_expander.set_expanded(false);
@@ -805,6 +815,47 @@ PlugUIBase::toggle_description()
 	}
 }
 
+void
+PlugUIBase::toggle_plugin_test()
+{
+	if (test_expander.get_expanded() &&
+	    !test_expander.get_child()) {
+		// Create the GUI
+		boost::shared_ptr<Plugin> plug = insert->plugin();//.pluginGet();
+		boost::shared_ptr<LuaProc> lp = boost::static_pointer_cast<LuaProc>(plug);
+                lp->setup_lua_inline_gui(&lua_gui);
+		lua_State* LG = lua_gui.getState ();
+		LuaInstance::bind_cairo (LG);
+		luabridge::LuaRef lua_render = luabridge::getGlobal ( LG, "render_inline");
+		assert(lua_render.isFunction());
+		_lua_render_inline = new luabridge::LuaRef(lua_render);
+		std::cout << "test" << std::endl;
+		if (testgui == 0) {
+			testgui = new PluginTestGui (insert,_lua_render_inline);
+		}
+		test_expander.add (*testgui);
+		test_expander.show_all ();
+		testgui->start_listening ();
+	}
+
+	if (!test_expander.get_expanded()) {
+		// Hide & remove from expander
+		const int child_height = test_expander.get_child ()->get_height ();
+
+		testgui->hide ();
+		testgui->stop_listening ();
+		test_expander.remove();
+
+		Gtk::Window *toplevel = (Gtk::Window*) test_expander.get_ancestor (GTK_TYPE_WINDOW);
+
+		if (toplevel) {
+			Gtk::Requisition wr;
+			toplevel->get_size (wr.width, wr.height);
+			wr.height -= child_height;
+			toplevel->resize (wr.width, wr.height);
+		}
+	}
+}
 void
 PlugUIBase::toggle_plugin_analysis()
 {

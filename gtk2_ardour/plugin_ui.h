@@ -53,7 +53,8 @@
 #include "ardour/types.h"
 #include "ardour/plugin.h"
 #include "ardour/variant.h"
-
+#include "ardour/luaproc.h"
+#include "ardour/luascripting.h"
 #include "widgets/ardour_button.h"
 #include "widgets/ardour_dropdown.h"
 #include "widgets/ardour_spinner.h"
@@ -83,6 +84,7 @@ namespace ArdourWidgets {
 class LatencyGUI;
 class ArdourWindow;
 class PluginEqGui;
+class PluginTestGui;
 class PluginLoadStatsGui;
 class PluginPresetsUI;
 class VSTPluginUI;
@@ -92,7 +94,7 @@ class PlugUIBase : public virtual sigc::trackable, public PBD::ScopedConnectionL
 public:
 	PlugUIBase (boost::shared_ptr<ARDOUR::PluginInsert>);
 	virtual ~PlugUIBase();
-
+	luabridge::LuaRef * _lua_render_inline;
 	virtual gint get_preferred_height () = 0;
 	virtual gint get_preferred_width () = 0;
 	virtual bool resizable () { return true; }
@@ -120,6 +122,7 @@ protected:
 	boost::shared_ptr<ARDOUR::PluginInsert> insert;
 	boost::shared_ptr<ARDOUR::Plugin> plugin;
 
+	LuaState lua_gui;
 	/* UI elements that can subclasses can add to their widgets */
 
 	/** a ComboBoxText which lists presets and manages their selection */
@@ -146,6 +149,7 @@ protected:
 	Gtk::Expander description_expander;
 	/** an expander containing the plugin analysis graph */
 	Gtk::Expander plugin_analysis_expander;
+	Gtk::Expander test_expander;
 	/** an expander containing the plugin cpu profile */
 	Gtk::Expander cpuload_expander;
 	/** a button which, when clicked, opens the latency GUI */
@@ -166,6 +170,7 @@ protected:
 	ArdourWindow* latency_dialog;
 
 	PluginEqGui* eqgui;
+	PluginTestGui* testgui;
 	PluginLoadStatsGui* stats_gui;
 	PluginPresetsUI* preset_gui;
 	ArdourWindow* preset_dialog;
@@ -185,6 +190,7 @@ protected:
 	bool bypass_button_release(GdkEventButton*);
 	void toggle_description ();
 	void toggle_plugin_analysis ();
+	void toggle_plugin_test();
 	void toggle_cpuload_display ();
 	void processor_active_changed (boost::weak_ptr<ARDOUR::Processor> p);
 	void plugin_going_away ();

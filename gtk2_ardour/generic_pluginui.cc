@@ -164,6 +164,7 @@ GenericPluginUI::GenericPluginUI (boost::shared_ptr<PluginInsert> pi, bool scrol
 		pack_end (_plugin_pianokeyboard_expander, false, false);
 	} else {
 		pack_end (plugin_analysis_expander, false, false);
+		pack_end (test_expander, false, false);
 	}
 
 	if (insert->provides_stats ()) {

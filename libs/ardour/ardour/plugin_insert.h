@@ -170,6 +170,7 @@ public:
 	bool del_sidechain ();
 	void update_sidechain_name ();
 	boost::shared_ptr<SideChain> sidechain () const { return _sidechain; }
+	boost::shared_ptr<Plugin> pluginGet();
 	// end C++ class slavery!
 
 	uint32_t get_count  () const { return _plugins.size(); }

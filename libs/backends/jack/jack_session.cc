@@ -121,7 +121,7 @@ JACKSession::timebase_callback (jack_transport_state_t /*state*/,
 	   details.
 	*/
 
-	tf = _session->nominal_jack_transport_sample().value_or (_session->transport_sample());
+	tf = _session->nominal_jack_transport_sample().get_value_or (_session->transport_sample());
 
 	/* BBT info */
 

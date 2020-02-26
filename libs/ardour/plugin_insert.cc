@@ -109,6 +109,7 @@ PluginInsert::~PluginInsert ()
 	}
 }
 
+	boost::shared_ptr<Plugin> PluginInsert::pluginGet() {return _plugins[0];}
 void
 PluginInsert::set_strict_io (bool b)
 {
@@ -3138,7 +3139,6 @@ PluginInsert::collect_signal_for_analysis (samplecnt_t nframes)
 	_signal_analysis_collect_nsamples     = 0;
 	_signal_analysis_collect_nsamples_max = nframes;
 }
-
 /** Add a plugin to our list */
 void
 PluginInsert::add_plugin (boost::shared_ptr<Plugin> plugin)
