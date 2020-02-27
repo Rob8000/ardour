@@ -461,7 +461,6 @@ PluginUIWindow::plugin_going_away ()
 	if (_pluginui) {
 		_pluginui->stop_updating(0);
 	}
-
 	death_connection.disconnect ();
 }
 
@@ -581,6 +580,7 @@ PlugUIBase::PlugUIBase (boost::shared_ptr<PluginInsert> pi)
 PlugUIBase::~PlugUIBase()
 {
 	delete eqgui;
+	delete testgui;
 	delete stats_gui;
 	delete preset_gui;
 	delete latency_gui;
@@ -833,6 +833,7 @@ PlugUIBase::toggle_plugin_test()
 		if (testgui == 0) {
 			testgui = new PluginTestGui (insert,_lua_render_inline);
 		}
+		plug->QueueDraw.connect(_qdraw_connection, invalidator(*this), boost::bind(&Gtk::Widget::queue_draw, testgui), gui_context());
 		test_expander.add (*testgui);
 		test_expander.show_all ();
 		testgui->start_listening ();

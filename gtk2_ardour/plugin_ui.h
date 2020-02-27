@@ -199,7 +199,7 @@ protected:
 	void update_preset_modified ();
 
 	bool has_descriptive_presets () const;
-
+	PBD::ScopedConnection _qdraw_connection;
 	PBD::ScopedConnection death_connection;
 	PBD::ScopedConnection active_connection;
 	PBD::ScopedConnection preset_added_connection;

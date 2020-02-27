@@ -64,10 +64,8 @@ PluginTestGui::PluginTestGui (boost::shared_ptr<ARDOUR::PluginInsert> pluginInse
 	 , _lua_render (lua_render)
 
 {
-	std::cout << "testing" << std::endl;
 	// Setup analysis drawing area
 	_analysis_scale_surface = 0;
-
 	_analysis_area = new Gtk::DrawingArea();
 	_analysis_width = 256.0;
 	_analysis_height = 256.0;

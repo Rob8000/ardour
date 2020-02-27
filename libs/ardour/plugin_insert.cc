@@ -3108,7 +3108,9 @@ PluginInsert::get_impulse_analysis_plugin()
 			// populate get_info ()->n_inputs and ->n_outputs
 			ChanCount useins;
 			ret->can_support_io_configuration (internal_input_streams (), out, &useins);
-			assert (out == internal_output_streams ());
+			std::cout << out << std::endl;
+			std::cout << internal_output_streams() << std::endl;
+			//assert (out == internal_output_streams ());
 		}
 		ret->configure_io (internal_input_streams (), out);
 		ret->set_owner (_owner);
