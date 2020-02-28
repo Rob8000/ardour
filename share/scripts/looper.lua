@@ -10,6 +10,11 @@ ardour {
 function dsp_ioconfig ()
 	return { {midi_in = 1, midi_out = 3, audio_in = -1, audio_out = -1}, }
 end
+
+function dsp_configure(ins, outs)
+	n_out = outs
+	n_out:set_midi(0)
+end
 local firstBar = 0
 local tme = 0 -- sample-counter
 local seq = 1 -- sequence-step
@@ -235,12 +240,29 @@ local allMidi = { midi_sequence1,midi_sequence2,midi_sequence3, midi_sequence4, 
 local midi_notes_state = {}
 local midi_notes_state_at_next_bar = {}
 local input_notes_to_output_channel_map = {}
+local midiToChannelMap = {}
+local noteToMidiMap = {}
 local total_notes = 64 
 local total_midi_out = 7
 local channelIsActive = {}
-local redValues = {}
-local greenValues = {}
-local blueValues = {}
+local channelColours = {}
+channelColours[1] = 6 
+channelColours[2] = 9
+channelColours[3] = 12 
+channelColours[4] = 16 
+channelColours[5] = 32
+channelColours[6] = 48 
+channelColours[7] = 56 
+channelColours[8] = 66 
+channelColours[9] = 80 
+channelColours[10] = 83 
+channelColours[11] = 89 
+channelColours[12] = 90 
+channelColours[13] = 91 
+channelColours[14] = 112 
+channelColours[15] = 113 
+channelColours[16] = 114
+local colourNeedsChange = {}
 function dsp_params ()
 	local tableToReturn = {};
 	for i = 1, 64 do
@@ -277,17 +299,31 @@ function dsp_init (rate)
 		channelIsActive[i] = 0
 	end
 	for i = 1, total_notes do
-		midi_notes_state[i] = 0
-		midi_notes_state_at_next_bar[i] = 0
-		redValues[i] = 0
-		blueValues[i] = 0
-		greenValues[i] = 0
-	end
-	for i = 1, total_notes do
-		input_notes_to_output_channel_map[i] =  (i % (total_midi_out - 1)) + 2
+		midi_notes_state[i] = -1
+		midi_notes_state_at_next_bar[i] = -1
 	end
 	print "managed to reload!"
 	load_midi_from_ranges()
+	for i = 1,#allMidi do
+		noteToMidiMap[i] = i
+		midiToChannelMap[i] = ((i - 1) % 16) + 1
+		midi_notes_state[i] = 0
+		midi_notes_state_at_next_bar[i] = 0
+	end
+	for i = 1, total_notes do
+		input_notes_to_output_channel_map[i] = i % 16 
+	end
+
+	
+
+	for i = 1, 64 do
+		if(noteToMidiMap[i] ~= nil) then
+			colourNeedsChange[i] = 1
+		else
+			colourNeedsChange[i] = 0
+		end
+	end
+	
 end
 
 function string.starts(String,Start)
@@ -296,17 +332,15 @@ end
 function load_midi_from_ranges ()
 
         local all_regions = ARDOUR.RegionFactory.regions()
-        local count = 1
+        local countLoops= 1
 	local hexValueOn = 0x90
 	local hexValueOff = 0x80
 	  for _, r in all_regions:iter() do
 		  local mr = r:to_midiregion ()
-			if mr:isnil () then goto next end
-			hexValueOn = hexValueOn + 1
-			hexValueOff = hexValueOff + 1
-			if string.starts(r:name(), "loop") then
+			if (mr:isnil() and  not mr:hidden())  then goto next end
+			if string.starts(r:name(), "drums") then
 				local nl = ARDOUR.LuaAPI.note_list (mr:model ()) 
-				local midiName = "midi_sequence" .. count
+				local midiName = "midi_sequence" .. countLoops 
 				local newMidi = {};
 				local noteCount = 1
 				  for n in nl:iter () do
@@ -321,9 +355,11 @@ function load_midi_from_ranges ()
 					   print ("{time = ", n:time ():to_double() + n:length():to_double(),    ",midi = { ", hexValueOff,",", (n:note ()),
 					 ",", 0, "}},")
 				  end
-				  allMidi[count] = newMidi
-				  print("Added pattern ", count)
-				  count = count + 1 
+				  hexValueOn = hexValueOn + 1
+				  hexValueOff = hexValueOff + 1
+				  allMidi[countLoops] = newMidi
+				  print("Added pattern ", countLoops)
+				  countLoops = countLoops + 1 
 			
 			end
 			::next::
@@ -342,27 +378,51 @@ function updateColours(bufs, in_map, out_map, n_samples, offset )
 		local ba = C.ByteVector()
 				--ba:add({240,0,32,41,2,24,11,61,0,0,0,247})
 				countOfColourCycles = 0
-			        local shmem = self:shmem()
-				local state = shmem:to_int(0):array()
 				for i = 1, total_notes do
-					local row = i % 8
-					local oldRed = redValues[i]
-					local oldBlue = blueValues[i]
-					local oldGreen = greenValues[i]
-					if(state[i] == 1) then
-						redValues[i] = 9*(row%8);
-						blueValues[i] = 9* ((row+3)%8)
-						greenValues[i] = 9* ((row + 6) % 8)
-					else
-						redValues[i] = 0 
-						blueValues[i] = 0 
-						greenValues[i] = 0 
-					end
-					if(redValues[i] ~= oldRed or blueValues[i] ~= oldBlue or greenValues[i] ~= oldGreen) then
+					if(colourNeedsChange[i] == 1) then
 						--ba:add({240,0,32,41,2,24,14,0,247})
-						ba:add({240,0,32,41,2,24,11, mappingBack[i],redValues[i],blueValues[i], greenValues[i],247})
-						mb:push_back (offset + countOfColourCycles , ba:size (), ba:to_array());
-						ba:clear ()
+						colourNeedsChange[i] = 0
+						local midiIndex = noteToMidiMap[i]
+						local channelIndex = midiToChannelMap[midiIndex]
+						if(channelIndex == nil) then
+									ba:add({145, mappingBack[i],0})
+									mb:push_back (offset + countOfColourCycles , ba:size (), ba:to_array());
+									ba:clear ()
+						else
+							local colour = channelColours[channelIndex]
+							if(midi_notes_state[i] == 0) then 
+								ba:add({144, mappingBack[i],colour})
+								mb:push_back (offset + countOfColourCycles , ba:size (), ba:to_array());
+								ba:clear ()
+							else
+								if(midi_notes_state[i] == 1) then 
+									ba:add({144, mappingBack[i],0})
+									mb:push_back (offset + countOfColourCycles , ba:size (), ba:to_array());
+									ba:clear ()
+									ba:add({145, mappingBack[i],colour})
+									mb:push_back (offset + countOfColourCycles , ba:size (), ba:to_array());
+									ba:clear ()
+								else
+									if(midi_notes_state[i] == 2) then
+										ba:add({144, mappingBack[i],colour + 1})
+										mb:push_back (offset + countOfColourCycles , ba:size (), ba:to_array());
+										ba:clear ()
+										ba:add({145, mappingBack[i],colour})
+										mb:push_back (offset + countOfColourCycles , ba:size (), ba:to_array());
+										ba:clear ()
+									else
+										if(midi_notes_state[i] == 3) then 
+											ba:add({144, mappingBack[i],118})
+											mb:push_back (offset + countOfColourCycles , ba:size (), ba:to_array());
+											ba:clear ()
+											--ba:add({145, mappingBack[i],colour})
+											--mb:push_back (offset + countOfColourCycles , ba:size (), ba:to_array());
+											--ba:clear ()
+										end
+									end
+								end
+							end
+						end
 						countOfColourCycles = countOfColourCycles + 1
 					end
 				end
@@ -387,14 +447,13 @@ function pushMidi (bufs, in_map, out_map, n_samples, offset, midi, sizeOfMidiTab
 			for _,midiData in pairs(midi) do
 				ba:add(midiData.data)
 				mb:push_back (offset + midiData.time, ba:size (), ba:to_array());
-				--print(midiData.time)
 				ba:clear ()
 			end
 
 				
     	end		
 
-	--ARDOUR.DSP.process_map (bufs,ARDOUR.ChanCount(ARDOUR.DataType("midi"),2), in_map, out_map, n_samples, offset)
+	ARDOUR.DSP.process_map (bufs,n_out, in_map, out_map, n_samples, offset)
 end
 
 function update_loop_on_or_off (bufs, in_map, out_map, n_samples, offset)
@@ -414,6 +473,7 @@ function update_loop_on_or_off (bufs, in_map, out_map, n_samples, offset)
 			   midi_notes_state[noteVal] = 2
 			   state[noteVal] = midi_notes_state[noteVal]
 			   self:queue_draw ()
+			   colourNeedsChange[noteVal] = 1
 			 end
 			 if(midi_notes_state_at_next_bar[noteVal] == 0  and midi_notes_state[noteVal] == 1) then
 			   local shmem = self:shmem()
@@ -421,6 +481,7 @@ function update_loop_on_or_off (bufs, in_map, out_map, n_samples, offset)
 			   midi_notes_state[noteVal] = 3
 			   state[noteVal] = midi_notes_state[noteVal]
 			   self:queue_draw ()
+			   colourNeedsChange[noteVal] = 1
 			 end
 			 end
 --		print (e:channel (), e:time (), e:size (), e:buffer():array (), e:buffer ():get_table (e:size ())[1], e:buffer():get_table (e:size ())[2], e:buffer():get_table (e:size())[3])
@@ -443,6 +504,9 @@ function update_loop_on_or_off (bufs, in_map, out_map, n_samples, offset)
 	--		 if(midi_notes_state[i] == 1 and midi_notes_state_at_next_bar[i] == 0) then
 	--		 channelIsActive[input_notes_to_output_channel_map[i]] = channelIsActive[input_notes_to_output_channel_map[i]] - 1
 	--	         end
+		         if(midi_notes_state[i] ~= midi_notes_state_at_next_bar[i]) then
+				 colourNeedsChange[i] = 1
+			 end
 			 midi_notes_state[i] = midi_notes_state_at_next_bar[i] 
 			 state[i] = midi_notes_state[i]
 			 self:queue_draw ()
@@ -466,6 +530,9 @@ function dsp_runmap (bufs, in_map, out_map, n_samples, offset)
 		if((timeAsAnOffset >= modOffset  and timeAsAnOffset < modOffset + n_samples)) then
 		for note = 1, 64 do
 			if(modOffset < 0) then
+				if(midi_notes_state[note] ~= midi_notes_state_at_next_bar[note]) then
+					colourNeedsChange[note] = 1
+				end
 				midi_notes_state[note] = midi_notes_state_at_next_bar[note]
 			end
 			if(input_notes_to_output_channel_map[note] == indexOfNote and (midi_notes_state[note] == 1 or midi_notes_state[note] == 3)) then
@@ -492,13 +559,13 @@ end
 
 function getTime(time, n_samples, timesUsed)
 	local timeToReturn = time
-	local count = 0
+	local counter = 0
 	if next(timesUsed) == nil then
 		return time
 	end
         while(alreadyUsed(timeToReturn, timesUsed)) do
-		count = count + 1
-		if(count > n_samples) then 
+		counter = counter + 1
+		if(counter > n_samples) then 
 			return 0 --let it crash
 		end
 		timeToReturn = (timeToReturn + 1) % n_samples
