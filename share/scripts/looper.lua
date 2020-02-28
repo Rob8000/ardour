@@ -8,7 +8,7 @@ ardour {
 }
 
 function dsp_ioconfig ()
-	return { {midi_in = 1, midi_out = 2, audio_in = -1, audio_out = -1}, }
+	return { {midi_in = 1, midi_out = 3, audio_in = -1, audio_out = -1}, }
 end
 local firstBar = 0
 local tme = 0 -- sample-counter
@@ -20,6 +20,71 @@ local currentOffset = 0
 local beatsInABar = 4
 local samplesPerBar = 0
 --assuming 4 beats per bar
+local mappingBack = {}
+mappingBack[	20	] = 	64
+mappingBack[	21	] = 	65
+mappingBack[	22	] = 	66
+mappingBack[	23	] = 	67
+mappingBack[	24	] = 	68
+mappingBack[	64	] = 	18
+mappingBack[	63	] = 	17
+mappingBack[	9	] = 	71
+mappingBack[	10	] = 	72
+mappingBack[	11	] = 	73
+mappingBack[	12	] = 	74
+mappingBack[	13	] = 	75
+mappingBack[	14	] = 	76
+mappingBack[	15	] = 	77
+mappingBack[	16	] = 	78
+mappingBack[	61	] = 	15
+mappingBack[	62	] = 	16
+mappingBack[	1	] = 	81
+mappingBack[	2	] = 	82
+mappingBack[	3	] = 	83
+mappingBack[	4	] = 	84
+mappingBack[	5	] = 	85
+mappingBack[	6	] = 	86
+mappingBack[	7	] = 	87
+mappingBack[	8	] = 	88
+mappingBack[	53	] = 	25
+mappingBack[	54	] = 	26
+mappingBack[	55	] = 	27
+mappingBack[	56	] = 	28
+mappingBack[	60	] = 	14
+mappingBack[	59	] = 	13
+mappingBack[	41	] = 	31
+mappingBack[	42	] = 	32
+mappingBack[	43	] = 	33
+mappingBack[	44	] = 	34
+mappingBack[	45	] = 	35
+mappingBack[	46	] = 	36
+mappingBack[	47	] = 	37
+mappingBack[	48	] = 	38
+mappingBack[	58	] = 	12
+mappingBack[	57	] = 	11
+mappingBack[	33	] = 	41
+mappingBack[	34	] = 	42
+mappingBack[	35	] = 	43
+mappingBack[	36	] = 	44
+mappingBack[	37	] = 	45
+mappingBack[	38	] = 	46
+mappingBack[	39	] = 	47
+mappingBack[	40	] = 	48
+mappingBack[	52	] = 	24
+mappingBack[	51	] = 	23
+mappingBack[	25	] = 	51
+mappingBack[	26	] = 	52
+mappingBack[	27	] = 	53
+mappingBack[	28	] = 	54
+mappingBack[	29	] = 	55
+mappingBack[	30	] = 	56
+mappingBack[	31	] = 	57
+mappingBack[	32	] = 	58
+mappingBack[	50	] = 	22
+mappingBack[	49	] = 	21
+mappingBack[	17	] = 	61
+mappingBack[	18	] = 	62
+mappingBack[	19	] = 	63
 
 local launchPadMappings = {}
  launchPadMappings[ 81 ] =  1
@@ -173,7 +238,9 @@ local input_notes_to_output_channel_map = {}
 local total_notes = 64 
 local total_midi_out = 7
 local channelIsActive = {}
-
+local redValues = {}
+local greenValues = {}
+local blueValues = {}
 function dsp_params ()
 	local tableToReturn = {};
 	for i = 1, 64 do
@@ -212,6 +279,9 @@ function dsp_init (rate)
 	for i = 1, total_notes do
 		midi_notes_state[i] = 0
 		midi_notes_state_at_next_bar[i] = 0
+		redValues[i] = 0
+		blueValues[i] = 0
+		greenValues[i] = 0
 	end
 	for i = 1, total_notes do
 		input_notes_to_output_channel_map[i] =  (i % (total_midi_out - 1)) + 2
@@ -265,8 +335,50 @@ function dsp_dsp_midi_input ()
 	return true
 end
 
+function updateColours(bufs, in_map, out_map, n_samples, offset )
+	ob = out_map:get (ARDOUR.DataType("midi"), 2)
+	if ob ~= ARDOUR.ChanMapping.Invalid then
+		local mb = bufs:get_midi (ob)
+		local ba = C.ByteVector()
+				--ba:add({240,0,32,41,2,24,11,61,0,0,0,247})
+				countOfColourCycles = 0
+			        local shmem = self:shmem()
+				local state = shmem:to_int(0):array()
+				for i = 1, total_notes do
+					local row = i % 8
+					local oldRed = redValues[i]
+					local oldBlue = blueValues[i]
+					local oldGreen = greenValues[i]
+					if(state[i] == 1) then
+						redValues[i] = 9*(row%8);
+						blueValues[i] = 9* ((row+3)%8)
+						greenValues[i] = 9* ((row + 6) % 8)
+					else
+						redValues[i] = 0 
+						blueValues[i] = 0 
+						greenValues[i] = 0 
+					end
+					if(redValues[i] ~= oldRed or blueValues[i] ~= oldBlue or greenValues[i] ~= oldGreen) then
+						--ba:add({240,0,32,41,2,24,14,0,247})
+						ba:add({240,0,32,41,2,24,11, mappingBack[i],redValues[i],blueValues[i], greenValues[i],247})
+						mb:push_back (offset + countOfColourCycles , ba:size (), ba:to_array());
+						ba:clear ()
+						countOfColourCycles = countOfColourCycles + 1
+					end
+				end
+				--ba:add({41,2,24})
+				--mb:push_back (offset + 3 , ba:size (), ba:to_array());
+				--ba:clear ()
+				--ba:add({11,60,30})
+				--mb:push_back (offset + 6 , ba:size (), ba:to_array());
+				--ba:clear ()
+				--ba:add({0,0,247})
+				--mb:push_back (offset + 9 , ba:size (), ba:to_array());
+				--ba:clear ()
+	end
+	-- passthrough audio, apply pin/channel mapping
+end
 function pushMidi (bufs, in_map, out_map, n_samples, offset, midi, sizeOfMidiTable)
-
 	assert (spb > 1)
 	local ob = out_map:get (ARDOUR.DataType ("midi"), 1)
 	if ob ~= ARDOUR.ChanMapping.Invalid then
@@ -281,8 +393,8 @@ function pushMidi (bufs, in_map, out_map, n_samples, offset, midi, sizeOfMidiTab
 
 				
     	end		
-	-- passthrough audio, apply pin/channel mapping
-	ARDOUR.DSP.process_map (bufs,ARDOUR.ChanCount(ARDOUR.DataType("midi"),2), in_map, out_map, n_samples, offset)
+
+	--ARDOUR.DSP.process_map (bufs,ARDOUR.ChanCount(ARDOUR.DataType("midi"),2), in_map, out_map, n_samples, offset)
 end
 
 function update_loop_on_or_off (bufs, in_map, out_map, n_samples, offset)
@@ -371,6 +483,7 @@ function dsp_runmap (bufs, in_map, out_map, n_samples, offset)
 	if(countGoingIn > 0) then
 		pushMidi(bufs, in_map, out_map, n_samples,  offset ,midiToSend, countGoingIn)
 	end
+	updateColours(bufs, in_map, out_map, n_samples, offset)
 	currentOffset = currentOffset + n_samples
 	currentSample = currentSample + n_samples
       	
