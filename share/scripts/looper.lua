@@ -239,9 +239,6 @@ local midi_sequence6  =  {
 local allMidi = { midi_sequence1,midi_sequence2,midi_sequence3, midi_sequence4, midi_sequence5, midi_sequence6}
 local midi_notes_state = {}
 local midi_notes_state_at_next_bar = {}
-local input_notes_to_output_channel_map = {}
-local midiToChannelMap = {}
-local noteToMidiMap = {}
 local total_notes = 64 
 local total_midi_out = 7
 local channelIsActive = {}
@@ -264,10 +261,27 @@ channelColours[15] = 113
 channelColours[16] = 114
 local colourNeedsChange = {}
 function dsp_params ()
+
+
+        local all_regions = ARDOUR.RegionFactory.regions()
+        local countLoops= 1
+	local tableScalePointsForLoops = {}
+	  for _, r in all_regions:iter() do
+		  local mr = r:to_midiregion ()
+			if (mr:isnil() and  not mr:hidden())  then goto next end
+			if string.starts(r:name(), "loop") then
+			  print(r:name(), "is midi pattern ", countLoops)
+			  tableScalePointsForLoops[r:name()] = countLoops
+			  countLoops = countLoops + 1 
+			end
+			::next::
+						
+		end	
+
 	local tableToReturn = {};
 	for i = 1, 64 do
 		tableToReturn[i] = 
-		{ ["type"] = "input", name = "" .. i, min = 0, max = 4, default = 0, enum = true, scalepoints =
+		{ ["type"] = "input", name = "Play Mode for note " .. i, min = 0, max = 4, default = 0, enum = true, scalepoints =
 			{
 				["Loop@Beat"] = 0,
 				["Loop@Note"] = 1,
@@ -275,6 +289,29 @@ function dsp_params ()
 			}
 		}
 	end
+	for i = 65, 128 do
+		tableToReturn[i] = 
+		{ ["type"] = "input", name = "Pattern Number assigned to note " .. (i - 64), min = 1, max = 2000, default = 1, enum = true, scalepoints = 
+			
+			tableScalePointsForLoops
+		}
+	end
+	tableOfChannels = {}
+	for i = 0, 16 do
+		local id = "Channel "  .. i
+		if i == 0 then
+			id = "Off"
+		end
+		tableOfChannels[id] = i
+	end 
+	for i = 129, 192 do
+		tableToReturn[i] = 
+		{ ["type"] = "input", name = "Channel assigned to note " .. (i - 128), min = 0, max = 16, default = 0, enum = true, scalepoints = 
+			tableOfChannels	
+		}
+	end
+
+
 
 	return tableToReturn
 end
@@ -305,25 +342,10 @@ function dsp_init (rate)
 	print "managed to reload!"
 	load_midi_from_ranges()
 	for i = 1,#allMidi do
-		noteToMidiMap[i] = i
-		midiToChannelMap[i] = ((i - 1) % 16) + 1
+		--midiToChannelMap[i] = ((i - 1) % 16) + 1
 		midi_notes_state[i] = 0
 		midi_notes_state_at_next_bar[i] = 0
 	end
-	for i = 1, total_notes do
-		input_notes_to_output_channel_map[i] = i % 16 
-	end
-
-	
-
-	for i = 1, 64 do
-		if(noteToMidiMap[i] ~= nil) then
-			colourNeedsChange[i] = 1
-		else
-			colourNeedsChange[i] = 0
-		end
-	end
-	
 end
 
 function string.starts(String,Start)
@@ -338,7 +360,8 @@ function load_midi_from_ranges ()
 	  for _, r in all_regions:iter() do
 		  local mr = r:to_midiregion ()
 			if (mr:isnil() and  not mr:hidden())  then goto next end
-			if string.starts(r:name(), "drums") then
+			if string.starts(r:name(), "loop") then
+				print(r:name(), "is midi pattern ", countLoops)
 				local nl = ARDOUR.LuaAPI.note_list (mr:model ()) 
 				local midiName = "midi_sequence" .. countLoops 
 				local newMidi = {};
@@ -355,8 +378,9 @@ function load_midi_from_ranges ()
 					   print ("{time = ", n:time ():to_double() + n:length():to_double(),    ",midi = { ", hexValueOff,",", (n:note ()),
 					 ",", 0, "}},")
 				  end
-				  hexValueOn = hexValueOn + 1
-				  hexValueOff = hexValueOff + 1
+				--  hexValueOn = hexValueOn + 1
+				--  hexValueOff = hexValueOff + 1
+				--  put them all on channel 1
 				  allMidi[countLoops] = newMidi
 				  print("Added pattern ", countLoops)
 				  countLoops = countLoops + 1 
@@ -372,6 +396,7 @@ function dsp_dsp_midi_input ()
 end
 
 function updateColours(bufs, in_map, out_map, n_samples, offset )
+	local ctrl = CtrlPorts:array()
 	ob = out_map:get (ARDOUR.DataType("midi"), 2)
 	if ob ~= ARDOUR.ChanMapping.Invalid then
 		local mb = bufs:get_midi (ob)
@@ -382,9 +407,9 @@ function updateColours(bufs, in_map, out_map, n_samples, offset )
 					if(colourNeedsChange[i] == 1) then
 						--ba:add({240,0,32,41,2,24,14,0,247})
 						colourNeedsChange[i] = 0
-						local midiIndex = noteToMidiMap[i]
-						local channelIndex = midiToChannelMap[midiIndex]
-						if(channelIndex == nil) then
+						local midiIndex = ctrl[i + 64]
+						local channelIndex = ctrl[i + 128]
+						if(channelIndex == nil or channelIndex == 0) then
 									ba:add({145, mappingBack[i],0})
 									mb:push_back (offset + countOfColourCycles , ba:size (), ba:to_array());
 									ba:clear ()
@@ -519,10 +544,11 @@ function dsp_runmap (bufs, in_map, out_map, n_samples, offset)
 	update_loop_on_or_off(bufs, in_map, out_map, n_samples, offset)
 	local midiToSend = {}
 	local countGoingIn = 0
-	local indexOfNote = 0
+	local indexOfMidi = 0
 	local timesUsed = {}
+	local ctrl = CtrlPorts:array ()
 	for _,midiLocal in pairs (allMidi) do
-	indexOfNote = indexOfNote + 1
+	indexOfMidi = indexOfMidi + 1
 	--if(channelIsActive[i] >= 1) then
 	for time, midiData in pairs (midiLocal) do
 		local timeAsAnOffset = math.floor(midiData.time * samplesPerBar /4.0)
@@ -535,19 +561,30 @@ function dsp_runmap (bufs, in_map, out_map, n_samples, offset)
 				end
 				midi_notes_state[note] = midi_notes_state_at_next_bar[note]
 			end
-			if(input_notes_to_output_channel_map[note] == indexOfNote and (midi_notes_state[note] == 1 or midi_notes_state[note] == 3)) then
+			if(ctrl[note + 128] ~= 0 and  ctrl[note + 64] == indexOfMidi and ( midi_notes_state[note] == 1 or midi_notes_state[note] == 3)) then
                                 local uniqueTime = getTime (timeAsAnOffset - modOffset, n_samples, timesUsed)
+				local midiDataWithAlteredChannel = {} 
+				if(ctrl[note  + 128] > 1) then
+					midiDataWithAlteredChannel[1] = midiData.midi[1] + ctrl[note  + 128] - 1
+				else
+					midiDataWithAlteredChannel[1] = midiData.midi[1]
+				end
+				midiDataWithAlteredChannel[2] = midiData.midi[2]
+				midiDataWithAlteredChannel[3] = midiData.midi[3]
 				table.insert(timesUsed, uniqueTime)
-				table.insert(midiToSend, {time = uniqueTime, data = midiData.midi})
+				table.insert(midiToSend, {time = uniqueTime, data = midiDataWithAlteredChannel})
 				countGoingIn = countGoingIn + 1
 			end
 			
 		end
  		end
 	end
- --	end
 	end
 	if(countGoingIn > 0) then
+		local function midiOrder(a,b)
+			return a.time < b.time
+		end
+		table.sort(midiToSend,midiOrder)
 		pushMidi(bufs, in_map, out_map, n_samples,  offset ,midiToSend, countGoingIn)
 	end
 	updateColours(bufs, in_map, out_map, n_samples, offset)
