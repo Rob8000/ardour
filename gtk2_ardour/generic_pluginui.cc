@@ -331,7 +331,20 @@ GenericPluginUI::build ()
 	std::vector<ControlUI *> control_uis;
 	bool grid_avail = false;
 	bool grid_veto = false;
-
+	bool got_a_multiple_of_a_square = false;
+	int squareOf = 0;
+	int multiple = 0;
+	for(int i = 1; i < 12; i++){
+		for(int j = 1; j < 4; j++)
+		{
+			if( plugin->parameter_count() == i * i * j)
+			{
+				got_a_multiple_of_a_square = true;
+				squareOf = i;
+				multiple = j;
+			}
+		}
+	}
 	// Build a ControlUI for each control port
 	for (size_t i = 0; i < plugin->parameter_count(); ++i) {
 
@@ -376,6 +389,19 @@ GenericPluginUI::build ()
 				cui->y0 = hint.y0;
 				cui->y1 = hint.y1;
 			}
+			else
+			{
+				if(got_a_multiple_of_a_square)
+				{
+					int x = i % squareOf;
+					cui->x0 = x;
+					cui->x1 = x + 1;
+					int y = i / squareOf;
+					cui->y0 = y;
+					cui->y1 = y + 1;
+						
+				}
+			}
 
 			const std::string param_docs = plugin->get_parameter_docs(i);
 			if (!param_docs.empty()) {
@@ -386,7 +412,7 @@ GenericPluginUI::build ()
 		}
 	}
 
-	bool grid = grid_avail && !grid_veto;
+	bool grid = (grid_avail && !grid_veto) || got_a_multiple_of_a_square;
 
 	// Build a ControlUI for each property
 	const Plugin::PropertyDescriptors& descs = plugin->get_supported_properties();
