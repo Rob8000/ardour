@@ -444,7 +444,7 @@ function updateColours(bufs, in_map, out_map, n_samples, offset )
 						local midiIndex = ctrl[i]
 						local channelIndex = ctrl[i + 64]
 						if(channelIndex == nil or channelIndex == 0) then
-									ba:add({145, mappingBack[i],0})
+									ba:add({144, mappingBack[i],0})
 									mb:push_back (offset + countOfColourCycles , ba:size (), ba:to_array());
 									ba:clear ()
 						else
