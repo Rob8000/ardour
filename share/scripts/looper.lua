@@ -15,6 +15,7 @@ function dsp_configure(ins, outs)
 	n_out = outs
 	n_out:set_midi(0)
 end
+local loopString = "bloop"
 local firstBar = 0
 local tme = 0 -- sample-counter
 local seq = 1 -- sequence-step
@@ -273,7 +274,7 @@ function dsp_params ()
 			if (mr:isnil() and  not mr:hidden())  then goto next end
 			local regionName = r:name()
 			
-			if string.starts(regionName, "loop") then
+			if string.starts(regionName, loopString) then
 			  print(r:name(), "is midi pattern ", countLoops)
 			  tableScalePointsForLoops[r:name()] = countLoops
 			  local splitName = string.gmatch(regionName, '([^-]+)')
@@ -391,7 +392,7 @@ function load_midi_from_ranges ()
 	  for _, r in all_regions:iter() do
 		  local mr = r:to_midiregion ()
 			if (mr:isnil() and  not mr:hidden())  then goto next end
-			if string.starts(r:name(), "loop") then
+			if string.starts(r:name(), loopString) then
 				print(r:name(), "is midi pattern ", countLoops)
 				local nl = ARDOUR.LuaAPI.note_list (mr:model ()) 
 				local midiName = "midi_sequence" .. countLoops 
