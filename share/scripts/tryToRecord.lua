@@ -19,6 +19,7 @@ local distanceFromRecordStart = -1
 local distanceFromLoopStart = 0
 local recordOnAtPreviousCheck = 0
 local loopOnAtPreviousCheck = 0
+local sizeOfLoop = 10000000000
 local firstBar = 0
 local tme = 0 -- sample-counter
 local seq = 1 -- sequence-step
@@ -86,6 +87,10 @@ function dsp_run (_, _, n_samples)
 	   recordOnAtPreviousCheck = 1
 	   midi_sequence1 = {}
 	 end
+	 if(recordOnAtPreviousCheck == 1 and record < 1) then
+		 sizeOfLoop = distanceFromRecordStart
+		 print(sizeOfLoop)
+	 end
 	 recordOnAtPreviousCheck = record
 	 local loop = ctrl[2]
 	 if(loopOnAtPreviousCheck  < 1 and loop == 1) then
@@ -107,6 +112,9 @@ function dsp_run (_, _, n_samples)
 	end
 	end
 	if(loop == 1) then
+		if(distanceFromLoopStart > sizeOfLoop) then
+			distanceFromLoopStart = 0
+		end
 		for _, midiAndTime in pairs(midi_sequence1) do
 			local offset = midiAndTime.time - distanceFromLoopStart 
 			if(offset >=0 and offset < n_samples) then
