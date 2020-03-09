@@ -115,12 +115,14 @@ function dsp_run (_, _, n_samples)
 		if(distanceFromLoopStart > sizeOfLoop) then
 			distanceFromLoopStart = 0
 		end
+		local m = 1
 		for _, midiAndTime in pairs(midi_sequence1) do
 			local offset = midiAndTime.time - distanceFromLoopStart 
 			if(offset >=0 and offset < n_samples) then
-				midiout[1] = {}
-				midiout[1]["time"] = offset
-				midiout[1]["data"] = midiAndTime.midi
+				midiout[m] = {}
+				midiout[m]["time"] = offset
+				midiout[m]["data"] = midiAndTime.midi
+				m = m + 1
 			end
 		end
 	end
